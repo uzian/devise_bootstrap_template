@@ -6,7 +6,7 @@ require 'fileutils'
 require 'securerandom'
 require 'html2slim'
 
-APP_NAME = "SuperApp"
+APP_NAME = "raft"
 SITE_URL = "https://www.example.com"
 
 def add_gems
@@ -60,7 +60,7 @@ def setup_mysql
     sql += "grant all on #{app_name}_#{env}.* to '#{db_user}';\n"
   end
   File.write('tmp/setup.sql', sql )
-  run "sudo mysql < tmp/setup.sql"
+  run "mysql < tmp/setup.sql"
   gsub_file 'config/database.yml', /adapter: sqlite3/, 'adapter: mysql2'
   gsub_file 'config/database.yml', /pool: .*/, "username: #{db_user}"
   gsub_file 'config/database.yml', /timeout: .*/, "password: #{db_passwd}\n  host: localhost\n  encoding: utf8mb4\n  collation: utf8mb4_unicode_ci"
@@ -287,37 +287,46 @@ end
 def add_bootstrap_navbar
   navbar = 'app/views/layouts/_navbar.html.slim'
   FileUtils.touch(navbar)
-  inject_into_file 'app/views/layouts/application.html.slim', before: '= yield' do
-    "\n= render 'layouts/navbar'\n"
+  inject_into_file 'app/views/layouts/application.html.slim', after: 'body' do
+    "
+    = render 'layouts/navbar'
+    .container
+      .mt-2
+"
   end
+  inject_into_file 'app/views/layouts/application.html.slim', before: '= yield' do
+    "    "
+  end
+end
 
   append_to_file navbar do
     '
 nav.navbar.navbar-expand-lg.navbar-light.bg-light
-  = link_to Rails.application.class.module_parent_name, root_path, class:"navbar-brand"
-  button.navbar-toggler[type="button" data-toggle="collapse" data-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation"]
-    span.navbar-toggler-icon
-  #navbarSupportedContent.collapse.navbar-collapse
-    ul.navbar-nav.mr-auto
-      li.nav-item.active
-        = link_to "Home", root_path, class:"nav-link"
-      li.nav-item
-        = link_to "Posts", posts_path, class:"nav-link"
-    ul.navbar-nav.ml-auto
-      - if current_user
-        li.nav-item.dropdown
-          a#navbarDropdown.nav-link.dropdown-toggle[href="#" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false"]
-            = current_user.username
-          .dropdown-menu.dropdown-menu-right[aria-labelledby="navbarDropdown"]
-            = link_to "Account Settings", edit_user_registration_path, class:"dropdown-item"
-            = link_to "New Post", new_post_path, class:"dropdown-item"
-            .dropdown-divider
-            = link_to "Logout", destroy_user_session_path, method: :delete, class:"dropdown-item"
-      - else
+  .container
+    = link_to Rails.application.class.module_parent_name, root_path, class:"navbar-brand"
+    button.navbar-toggler[type="button" data-toggle="collapse" data-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation"]
+      span.navbar-toggler-icon
+    #navbarSupportedContent.collapse.navbar-collapse
+      ul.navbar-nav.mr-auto
+        li.nav-item.active
+          = link_to "Home", root_path, class:"nav-link"
         li.nav-item
-          = link_to "Create Account", new_user_registration_path, class:"nav-link"
-        li.nav-item
-          = link_to "Login", new_user_session_path, class:"nav-link"
+          = link_to "Posts", posts_path, class:"nav-link"
+      ul.navbar-nav.ml-auto
+        - if current_user
+          li.nav-item.dropdown
+            a#navbarDropdown.nav-link.dropdown-toggle[href="#" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false"]
+              = current_user.username
+            .dropdown-menu.dropdown-menu-right[aria-labelledby="navbarDropdown"]
+              = link_to "Account Settings", edit_user_registration_path, class:"dropdown-item"
+              = link_to "New Post", new_post_path, class:"dropdown-item"
+              .dropdown-divider
+              = link_to "Logout", destroy_user_session_path, method: :delete, class:"dropdown-item"
+        - else
+          li.nav-item
+            = link_to "Create Account", new_user_registration_path, class:"nav-link"
+          li.nav-item
+            = link_to "Login", new_user_session_path, class:"nav-link"
 '
   end
 end
@@ -325,17 +334,31 @@ end
 def convert_erb_to_slim
   in_root do
     run 'erb2slim app/views -d'
-    run
   end
-  gsub_file 'config/database.yml', /adapter: sqlite3/, 'adapter: mysql2'
+  devise_view_files = Dir.glob("app/views/devise/**/*").reject { |f| File.directory?(f) }
+  devise_view_files.each do |f|
+    gsub_file f, /,\n\s*-\s*/, ', '
+    gsub_file f, /f.button (.*)$/, 'f.button \1, class: \'btn btn-primary m-1\''
+  end
 end
 
 def setup_slim
   in_root do
-    append_to_file 'config/environments/development.rb' {"Slim::Engine.set_options pretty: true, sort_attrs: false"}
-    append_to_file 'config/environments/test.rb' {"Slim::Engine.set_options pretty: true, sort_attrs: false"}
+    append_to_file 'config/environments/development.rb' do
+      "Slim::Engine.set_options pretty: true, sort_attrs: false"
+    end
+    append_to_file 'config/environments/test.rb' do
+      "Slim::Engine.set_options pretty: true, sort_attrs: false"
+    end
   end
 end
+
+# def fix_tabs_in_views
+#   devise_view_files = Dir.glob("app/**/**/*").reject { |f| File.directory?(f) }
+#   devise_view_files.each do |f|
+#     gsub_file f, /\t/, ', '
+#   end
+# end
 
 source_paths
 
@@ -354,4 +377,5 @@ after_bundle do
   add_bootstrap
   convert_erb_to_slim
   add_bootstrap_navbar
+  #fix_tabs_in_views
 end
