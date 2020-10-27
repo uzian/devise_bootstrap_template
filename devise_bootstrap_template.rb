@@ -7,7 +7,10 @@ require 'securerandom'
 require 'html2slim'
 
 APP_NAME = "raft"
-SITE_URL = "https://www.example.com"
+DEPLOY_HOST = "www.example.com"
+SITE_URL = "https://#{DEPLOY_HOST}/"
+REPO_URL = "git@example.com:organization/raft.git"
+
 
 def add_gems
   gem 'dotenv-rails', require: 'dotenv/rails-now'
@@ -287,17 +290,18 @@ end
 def add_bootstrap_navbar
   navbar = 'app/views/layouts/_navbar.html.slim'
   FileUtils.touch(navbar)
+  gsub_file 'app/views/layouts/application.html.slim', /\= yield/, ''
   inject_into_file 'app/views/layouts/application.html.slim', after: 'body' do
     "
     = render 'layouts/navbar'
     .container
-      .mt-2
+      .mt-3
+        = yield
 "
   end
   inject_into_file 'app/views/layouts/application.html.slim', before: '= yield' do
     "    "
   end
-end
 
   append_to_file navbar do
     '
@@ -316,7 +320,7 @@ nav.navbar.navbar-expand-lg.navbar-light.bg-light
         - if current_user
           li.nav-item.dropdown
             a#navbarDropdown.nav-link.dropdown-toggle[href="#" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false"]
-              = current_user.username
+              = current_user.email
             .dropdown-menu.dropdown-menu-right[aria-labelledby="navbarDropdown"]
               = link_to "Account Settings", edit_user_registration_path, class:"dropdown-item"
               = link_to "New Post", new_post_path, class:"dropdown-item"
@@ -340,6 +344,49 @@ def convert_erb_to_slim
     gsub_file f, /,\n\s*-\s*/, ', '
     gsub_file f, /f.button (.*)$/, 'f.button \1, class: \'btn btn-primary m-1\''
   end
+end
+
+def setup_capistrano
+  run 'bundle exec cap install'
+  gsub_file 'config/deploy.rb', /my_app_name/, APP_NAME
+  gsub_file 'config/deploy.rb', /git@example\.com:me\/my_repo\.git/, REPO_URL
+  gsub_file 'config/deploy.rb', /# append :linked_dirs/, ' append :linked_dirs,'
+  gsub_file 'config/deploy.rb', /"public\/system"/, '"public/system", "public/uploads", "storage"'
+  append_to_file 'config/deploy.rb' do
+"
+namespace :deploy do
+
+  desc 'Restart application'
+  task :restart do
+    on roles(:app), in: :sequence, wait: 5 do
+      # Your restart mechanism here, for example:
+      execute :touch, release_path.join('tmp/restart.txt')
+    end
+  end
+
+  after :publishing, :restart
+
+  after :restart, :clear_cache do
+    on roles(:web), in: :groups, limit: 3, wait: 10 do
+      # Here we can do anything such as:
+      # within release_path do
+      #   execute :rake, 'cache:clear'
+      # end
+    end
+  end
+
+end
+"
+append_to_file 'config/deploy/production.rb'
+"
+server '#{DEPLOY_HOST}', user: 'deploy', roles: %w{web app}
+set :deploy_to, '/apps/#{APP_NAME}'
+set :rails_env, :production
+
+"
+
+  end
+
 end
 
 def setup_slim
@@ -377,5 +424,6 @@ after_bundle do
   add_bootstrap
   convert_erb_to_slim
   add_bootstrap_navbar
+  setup_capistrano
   #fix_tabs_in_views
 end
