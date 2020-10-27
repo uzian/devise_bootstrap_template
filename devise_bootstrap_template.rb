@@ -290,6 +290,7 @@ end
 def add_bootstrap_navbar
   navbar = 'app/views/layouts/_navbar.html.slim'
   FileUtils.touch(navbar)
+  gsub_file 'app/views/layouts/application.html.slim', /stylesheet_link_tag/, 'stylesheet_pack_tag'
   gsub_file 'app/views/layouts/application.html.slim', /\= yield/, ''
   inject_into_file 'app/views/layouts/application.html.slim', after: 'body' do
     "
@@ -352,39 +353,17 @@ def setup_capistrano
   gsub_file 'config/deploy.rb', /git@example\.com:me\/my_repo\.git/, REPO_URL
   gsub_file 'config/deploy.rb', /# append :linked_dirs/, ' append :linked_dirs,'
   gsub_file 'config/deploy.rb', /"public\/system"/, '"public/system", "public/uploads", "storage"'
-  append_to_file 'config/deploy.rb' do
-"
-namespace :deploy do
 
-  desc 'Restart application'
-  task :restart do
-    on roles(:app), in: :sequence, wait: 5 do
-      # Your restart mechanism here, for example:
-      execute :touch, release_path.join('tmp/restart.txt')
-    end
-  end
-
-  after :publishing, :restart
-
-  after :restart, :clear_cache do
-    on roles(:web), in: :groups, limit: 3, wait: 10 do
-      # Here we can do anything such as:
-      # within release_path do
-      #   execute :rake, 'cache:clear'
-      # end
-    end
-  end
-
-end
-"
-append_to_file 'config/deploy/production.rb'
+  append_to_file 'config/deploy/production.rb' do
 "
 server '#{DEPLOY_HOST}', user: 'deploy', roles: %w{web app}
 set :deploy_to, '/apps/#{APP_NAME}'
 set :rails_env, :production
-
 "
+  end
 
+  ["rvm", "bundler", "rails/assets", "rails/migrations", "passenger"].each do |cfg|
+    gsub_file 'Capfile', "# require \"capistrano/#{cfg}", "require \"capistrano/#{cfg}"
   end
 
 end
@@ -398,6 +377,10 @@ def setup_slim
       "Slim::Engine.set_options pretty: true, sort_attrs: false"
     end
   end
+end
+
+def remove_master_key_in_gitignore
+  gsub_file '.gitignore', /\/config\/master.key/, "# /config/master.key"
 end
 
 # def fix_tabs_in_views
@@ -425,5 +408,6 @@ after_bundle do
   convert_erb_to_slim
   add_bootstrap_navbar
   setup_capistrano
+  remove_master_key_in_gitignore
   #fix_tabs_in_views
 end

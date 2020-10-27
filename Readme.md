@@ -32,8 +32,8 @@ APP_NAME = "raft"
 SITE_URL = "https://www.example.com"
 
 Cleaning up mysql database in case of failure
-drop database baf3_test;
-drop database baf3_dev;
-drop database baf3_prod;
-drop user baf3;
+drop database raft_test;
+drop database raft_dev;
+drop database raft_prod;
+drop user raft;
 
